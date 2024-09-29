@@ -1,0 +1,158 @@
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Title of the app
+st.title('Community Expense Tracker')
+
+# Initialize session state for storing expenses, budgets, and savings goals
+if 'expenses' not in st.session_state:
+    st.session_state['expenses'] = []
+if 'budget' not in st.session_state:
+    st.session_state['budget'] = {'Food': 0, 'Transport': 0, 'Entertainment': 0, 'Utilities': 0, 'Other': 0}
+if 'savings_goals' not in st.session_state:
+    st.session_state['savings_goals'] = []
+if 'dark_mode' not in st.session_state:
+    st.session_state['dark_mode'] = False
+
+# Function to add an expense
+def add_expense(date, category, description, amount):
+    new_expense = {
+        'Date': date,
+        'Category': category,
+        'Description': description,
+        'Amount': amount
+    }
+    return new_expense
+
+# Theme toggle
+def toggle_theme():
+    st.session_state['dark_mode'] = not st.session_state['dark_mode']
+
+st.sidebar.button("Toggle Dark/Light Mode", on_click=toggle_theme)
+
+# Apply theme styles based on the session state
+if st.session_state['dark_mode']:
+    st.markdown("""
+        <style>
+        .stApp {
+            background-color: #2E2E2E;
+            color: white;
+        }
+        .stButton, .stSelectbox, .stTextInput, .stNumberInput {
+            background-color: #444;
+            color: white;
+        }
+        .stButton:hover {
+            background-color: #555;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <style>
+        .stApp {
+            background-color: white;
+            color: black;
+        }
+        .stButton, .stSelectbox, .stTextInput, .stNumberInput {
+            background-color: #F0F0F0;
+            color: black;
+        }
+        .stButton:hover {
+            background-color: #D0D0D0;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+# Input form for new expense
+with st.form(key='expense_form'):
+    date = st.date_input('Date')
+    category = st.selectbox('Category', ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'])
+    description = st.text_input('Description')
+    amount = st.number_input('Amount', min_value=0.0, format='%.2f')
+    submit_button = st.form_submit_button(label='Add Expense')
+
+    if submit_button:
+        new_expense = add_expense(date, category, description, amount)
+        st.session_state['expenses'].append(new_expense)
+        st.success('Expense added successfully!')
+
+# Input form for monthly budget
+with st.form(key='budget_form'):
+    st.subheader('Set Monthly Budget')
+    for category in st.session_state['budget'].keys():
+        st.session_state['budget'][category] = st.number_input(f'Set budget for {category}', min_value=0.0, format='%.2f')
+    budget_submit = st.form_submit_button(label='Update Budget')
+
+    if budget_submit:
+        st.success('Budget updated successfully!')
+
+# Input form for savings goals
+with st.form(key='savings_form'):
+    goal_name = st.text_input('Savings Goal Name')
+    goal_amount = st.number_input('Goal Amount', min_value=0.0, format='%.2f')
+    goal_submit = st.form_submit_button(label='Add Savings Goal')
+
+    if goal_submit and goal_name:
+        st.session_state['savings_goals'].append({'Goal': goal_name, 'Amount': goal_amount})
+        st.success('Savings goal added successfully!')
+
+# Display expenses in a table
+if st.session_state['expenses']:
+    df_expenses = pd.DataFrame(st.session_state['expenses'])
+    st.subheader('Expenses')
+    st.dataframe(df_expenses)
+
+    # Summary of expenses by category
+    st.subheader('Summary')
+    expense_summary = df_expenses.groupby('Category')['Amount'].sum().reset_index()
+    st.dataframe(expense_summary)
+
+    # Chart visualization
+    st.subheader('Expense Distribution')
+    plt.figure(figsize=(10, 6))
+    plt.pie(expense_summary['Amount'], labels=expense_summary['Category'], autopct='%1.1f%%')
+    plt.title('Expense Distribution by Category')
+    st.pyplot(plt)
+
+    # Compare expenses with budget
+    st.subheader('Budget vs. Expenses')
+    budget_df = pd.DataFrame(list(st.session_state['budget'].items()), columns=['Category', 'Budget'])
+    budget_df = budget_df.merge(expense_summary, on='Category', how='left').fillna(0)
+    budget_df.columns = ['Category', 'Budget', 'Expenses']
+    st.dataframe(budget_df)
+
+    # Export expenses
+    csv = df_expenses.to_csv(index=False)
+    st.download_button("Download Expenses as CSV", csv, "expenses.csv", "text/csv")
+else:
+    st.info('No expenses added yet.')
+
+# Display Savings Goals
+if st.session_state['savings_goals']:
+    st.subheader('Savings Goals')
+    df_goals = pd.DataFrame(st.session_state['savings_goals'])
+    st.dataframe(df_goals)
+else:
+    st.info('No savings goals added yet.')
+
+# Search functionality
+st.subheader('Search Expenses')
+search_term = st.text_input('Enter a term to search')
+if search_term:
+    filtered_expenses = df_expenses[df_expenses['Description'].str.contains(search_term, case=False)]
+    st.dataframe(filtered_expenses)
+
+# Recommendations for budget
+st.subheader('Smart Budget Recommendations')
+if 'df_expenses' in locals() and not df_expenses.empty:
+    total_expenses = df_expenses['Amount'].sum()
+    st.write(f'Total Expenses: {total_expenses:.2f}')
+    if total_expenses > 0:
+        for category in st.session_state['budget']:
+            st.write(f'Recommended Budget for {category}: {total_expenses * 0.1:.2f}')  # 10% of total expenses as recommendation
+else:
+    st.info('No expenses recorded yet to provide recommendations.')
+
+# Run the app with: streamlit run filename.py
